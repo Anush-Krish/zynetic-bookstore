@@ -2,9 +2,13 @@ package com.zynetic.bookstore.service;
 
 import com.zynetic.bookstore.dto.BookRequestDto;
 import com.zynetic.bookstore.dto.BookResponseDto;
+import com.zynetic.bookstore.dto.RatingDto;
 import com.zynetic.bookstore.entity.Book;
+import com.zynetic.bookstore.entity.BookRating;
 import com.zynetic.bookstore.mapper.BookMapper;
+import com.zynetic.bookstore.mapper.RatingMapper;
 import com.zynetic.bookstore.repository.BookRepository;
+import com.zynetic.bookstore.repository.RatingRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +25,8 @@ import java.util.UUID;
 public class BookService {
     private final BookRepository bookRepository;
     private final BookMapper bookMapper;
+    private final RatingMapper ratingMapper;
+    private final RatingRepository ratingRepository;
 
     public BookResponseDto createBook(BookRequestDto requestDto) {
         try {
@@ -37,7 +43,11 @@ public class BookService {
 
     public BookResponseDto getBookById(UUID bookId) {
         return bookRepository.findById(bookId)
-                .map(bookMapper::toResponseDto)
+                .map(book -> {
+                    BookResponseDto dto = bookMapper.toResponseDto(book);
+                    populateAverageRating(dto);
+                    return dto;
+                })
                 .orElseThrow(() -> {
                     log.error("Book with bookId {} does not exist.", bookId);
                     return new RuntimeException("Book does not exist.");
@@ -47,13 +57,17 @@ public class BookService {
     public List<BookResponseDto> getAllBooksPaginated(Integer page, Integer size) {
         try {
             Pageable pageable = PageRequest.of(page, size);
-            List<Book> bookResponseDtoList = bookRepository.findAllBy(pageable);
-            return bookMapper.toResponseDtoList(bookResponseDtoList);
+            List<Book> books = bookRepository.findAllBy(pageable);
+            List<BookResponseDto> responseDtos = bookMapper.toResponseDtoList(books);
+            populateAverageRating(responseDtos);
+            return responseDtos;
+
         } catch (Exception e) {
             log.error("Error in fetching all books{}", e.getMessage());
             throw new RuntimeException("Error fetching all books");
         }
     }
+
     @Transactional
     public BookResponseDto updateBook(UUID bookId, BookRequestDto requestDto) {
         try {
@@ -84,5 +98,48 @@ public class BookService {
             throw new RuntimeException("Error in deleting book.");
         }
     }
+
+    public RatingDto createRating(RatingDto ratingDto) {
+        BookRating rating = ratingMapper.toEntity(ratingDto);
+        rating.setUserId(rating.getUserId());//todo impl common util to extract userid from jwt
+        BookRating savedRating = ratingRepository.save(rating);
+        return ratingMapper.toDto(savedRating);
+    }
+
+    private void populateAverageRating(BookResponseDto bookResponseDto) {
+        List<BookRating> ratings = ratingRepository.findAllByBookId(bookResponseDto.getBookId());
+        if (!ratings.isEmpty()) {
+            double average = ratings.stream()
+                    .mapToInt(BookRating::getRating)
+                    .average()
+                    .orElse(0.0);
+            bookResponseDto.setAverageRating(average);
+        } else {
+            bookResponseDto.setAverageRating(0.0);
+        }
+    }
+
+    private void populateAverageRating(List<BookResponseDto> bookResponseDtoList) {
+        for (BookResponseDto dto : bookResponseDtoList) {
+            populateAverageRating(dto);
+        }
+    }
+
+    public List<BookResponseDto> filterBooks(String author, String category, String title, Double minRating, Integer page, Integer size) {
+        Pageable pageable = PageRequest.of(page, size);
+        List<Book> books = bookRepository.searchBooks(author, category, title, pageable);
+        List<BookResponseDto> dtos = bookMapper.toResponseDtoList(books);
+        populateAverageRating(dtos);
+
+        if (minRating != null) {
+            dtos = dtos.stream()
+                    .filter(dto -> dto.getAverageRating() >= minRating)
+                    .toList();
+        }
+
+        return dtos;
+    }
+
+
 
 }

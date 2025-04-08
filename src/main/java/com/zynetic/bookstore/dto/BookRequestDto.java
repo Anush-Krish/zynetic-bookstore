@@ -20,6 +20,7 @@ public class BookRequestDto {
     @Enumerated(EnumType.STRING)
     private BookCategory category;
     private String price;
+    private String author;
 
     @DateTimeFormat(pattern = "dd-MM-yyyy HH:mm:ss")
     private Date publishDate;

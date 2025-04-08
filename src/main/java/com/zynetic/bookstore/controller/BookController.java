@@ -47,5 +47,18 @@ public class BookController {
             @RequestBody BookRequestDto bookRequestDto) {
         return ResponseEntity.ok(bookService.updateBook(bookId, bookRequestDto));
     }
+    @GetMapping("/books")
+    public ResponseEntity<List<BookResponseDto>> searchBooks(
+            @RequestParam(required = false) String author,
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) Double minRating,
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "10") Integer size
+    ) {
+        List<BookResponseDto> books = bookService.filterBooks(author, category, title, minRating, page, size);
+        return ResponseEntity.ok(books);
+    }
+
 }
 

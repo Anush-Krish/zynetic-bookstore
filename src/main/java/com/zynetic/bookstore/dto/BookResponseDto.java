@@ -17,6 +17,8 @@ public class BookResponseDto {
     @Enumerated(EnumType.STRING)
     private BookCategory category;
     private String price;
+    private String author;
 
     private Date publishDate;
+    private Double averageRating;
 }
